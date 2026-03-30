@@ -7,15 +7,17 @@ import os
 from streamlit_folium import folium_static
 from folium.plugins import HeatMap
 
-# 1. Page Config & Professional Styling
+# 1. Page Config & Professional Branding
 st.set_page_config(page_title="Vehicle Analytics Pro", layout="wide", page_icon="🏎️")
 
-# Custom CSS for the "Spec Cards"
+# Custom CSS for UI Polish and Responsive Spec Cards
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
-    div[data-testid="stMetricValue"] { font-size: 28px; color: #00d4ff; }
+    div[data-testid="stMetricValue"] { font-size: 26px; color: #00d4ff; }
     section[data-testid="stSidebar"] { background-color: #161b22; }
+    
+    /* Responsive Spec Card Styling */
     .spec-card {
         border: 1px solid #333; 
         padding: 20px; 
@@ -23,15 +25,19 @@ st.markdown("""
         background-color: #1e252e;
         margin-bottom: 20px;
         transition: 0.3s;
-        height: 220px;
+        min-height: 250px; /* Increased min-height to prevent spill-over */
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
     .spec-card:hover { 
         border-color: #00d4ff; 
-        transform: translateY(-5px);
-        box-shadow: 0 4px 15px rgba(0, 212, 255, 0.2);
+        transform: translateY(-3px);
+        box-shadow: 0 4px 15px rgba(0, 212, 255, 0.15);
     }
-    .spec-label { color: #888; font-size: 12px; text-transform: uppercase; }
-    .spec-value { color: #ffffff; font-size: 15px; font-weight: 500; margin-bottom: 8px; }
+    .spec-label { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+    .spec-value { color: #ffffff; font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+    .model-title { color: #00d4ff; margin-top: 0; margin-bottom: 15px; font-size: 1.2rem; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -39,41 +45,37 @@ st.markdown("""
 FILE_ID = "17VhcD1SApY6M1escKpKloilcO3XAMeWK"
 OUTPUT_FILE = "vehicles.parquet"
 
-@st.cache_data(show_spinner="📥 Synchronizing Market Data...")
+@st.cache_data(show_spinner="📥 Syncing Market Data...")
 def load_data(file_id):
     url = f'https://drive.google.com/uc?id={file_id}'
     if not os.path.exists(OUTPUT_FILE):
         gdown.download(url, OUTPUT_FILE, quiet=False)
-
     try:
-        # Loading only the columns needed for current analysis
         cols = ["manufacturer", "model", "year", "price", "lat", "long", 
-                "fuel", "drive", "transmission", "type", "cylinders"]
-        
+                "fuel", "drive", "transmission", "type"]
         df = pd.read_parquet(OUTPUT_FILE, columns=cols)
-        
-        # Performance Optimizations
         df['price'] = pd.to_numeric(df['price'], downcast='float')
         df['year'] = pd.to_numeric(df['year'], downcast='integer')
         for col in ["manufacturer", "fuel", "drive", "transmission", "type"]:
             df[col] = df[col].astype('category')
-            
         return df.dropna(subset=["manufacturer", "model", "price"])
     except Exception as e:
-        st.error(f"Data Load Error: {e}")
-        return pd.DataFrame()
+        st.error(f"Load Error: {e}"); return pd.DataFrame()
 
 df = load_data(FILE_ID)
 
-# --- SIDEBAR BRANDING ---
+# --- SIDEBAR NAVIGATION ---
 st.sidebar.markdown("<h1 style='text-align: center; color: #00d4ff;'>🏎️ VehiclePro</h1>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
+
+# Updated Sidebar Name as requested
 page = st.sidebar.radio("NAVIGATE EXPLORER", [
     "🏠 Dashboard Home", 
-    "📊 Manufacturer Analysis",
+    "📊 Manufacturer Inventory",
     "📈 Market Trends", 
     "🗺️ Regional Heatmap"
 ])
+
 st.sidebar.markdown("---")
 st.sidebar.caption("BSc Data Science Portfolio")
 st.sidebar.caption("By Riddhiman Mazumder")
@@ -87,80 +89,87 @@ if page == "🏠 Dashboard Home":
         c1.metric("Active Listings", f"{len(df):,}")
         c2.metric("Market Brands", df['manufacturer'].nunique())
         c3.metric("Avg Price", f"${df['price'].mean():,.0f}")
-        c4.metric("Avg Age", f"{int(2026 - df['year'].median())} Years")
-        
+        c4.metric("Avg Age", f"{int(2026 - df['year'].median())} Yrs")
         st.markdown("---")
-        st.markdown("### 📋 Dataset Overview")
+        st.markdown("### 📋 Live Data Feed")
         st.dataframe(df.head(15), use_container_width=True)
 
-elif page == "📊 Manufacturer Analysis":
+elif page == "📊 Manufacturer Inventory":
     st.title("🏭 Manufacturer Inventory")
     if not df.empty:
         brand = st.selectbox("Select a Manufacturer:", sorted(df['manufacturer'].unique()))
-        
-        # Filtering logic
         b_df = df[df['manufacturer'] == brand].copy()
         b_df['model'] = b_df['model'].astype(str)
         
-        search = st.text_input("🔍 Filter by Model Name:")
+        search = st.text_input("🔍 Filter Model Name:")
         if search:
             b_df = b_df[b_df['model'].str.contains(search, case=False)]
 
-        # Aggregate for unique model cards
-        # We take the mode (most common value) for categorical specs
+        # Aggregate data for clean cards
         grouped = b_df.groupby('model', observed=True).agg({
-            'price': 'mean',
-            'year': 'median',
+            'price': 'mean', 'year': 'median',
             'fuel': lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A',
             'transmission': lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A',
             'drive': lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A',
             'type': lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A'
-        }).reset_index().head(24) # Limit to 24 cards for performance
+        }).reset_index().head(24)
 
-        st.write(f"Showing performance specs for **{brand}** top models:")
+        st.write(f"Displaying technical specifications for **{brand}**:")
         
         cols = st.columns(3)
         for i, (idx, row) in enumerate(grouped.iterrows()):
             with cols[i % 3]:
                 st.markdown(f"""
                 <div class="spec-card">
-                    <h3 style="color:#00d4ff; margin-top:0; margin-bottom:15px;">{row['model'].title()}</h3>
+                    <h3 class="model-title">{row['model'].title()}</h3>
                     <div style="display: flex; justify-content: space-between;">
-                        <div>
+                        <div style="width: 48%;">
                             <div class="spec-label">Avg Price</div>
                             <div class="spec-value">${row['price']:,.0f}</div>
-                            <div class="spec-label">Fuel Type</div>
+                            <div class="spec-label">Fuel</div>
                             <div class="spec-value">{row['fuel'].title()}</div>
                         </div>
-                        <div>
+                        <div style="width: 48%;">
                             <div class="spec-label">Median Year</div>
                             <div class="spec-value">{int(row['year'])}</div>
-                            <div class="spec-label">Transmission</div>
+                            <div class="spec-label">Gearbox</div>
                             <div class="spec-value">{row['transmission'].title()}</div>
                         </div>
                     </div>
-                    <div class="spec-label">Drive / Body Style</div>
+                    <hr style="border:0.5px solid #444; margin: 10px 0;">
+                    <div class="spec-label">Drive / Configuration</div>
                     <div class="spec-value">{row['drive'].upper()} • {row['type'].title()}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
 elif page == "📈 Market Trends":
-    st.title("📈 Inventory & Pricing Insights")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("Inventory Distribution (Top 10)")
-        fig = px.pie(df['manufacturer'].value_counts().nlargest(10), hole=0.5, template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
-    with c2:
-        st.subheader("Price vs. Year Density")
-        # Sample for faster plotting
-        sample_df = df.sample(min(len(df), 5000))
-        fig2 = px.scatter(sample_df, x="year", y="price", color="fuel", template="plotly_dark", opacity=0.5)
-        st.plotly_chart(fig2, use_container_width=True)
+    st.title("📈 Advanced Market Insights")
+    
+    t1, t2, t3 = st.tabs(["📉 Depreciation", "🏗️ Market Mix", "🔗 Correlations"])
+    
+    with t1:
+        st.subheader("Price Depreciation vs. Vehicle Year")
+        sample_df = df.sample(min(len(df), 3000))
+        fig_trend = px.scatter(sample_df, x="year", y="price", color="fuel",
+                               trendline="lowess", template="plotly_dark", opacity=0.4,
+                               labels={"year": "Model Year", "price": "Price ($)"})
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+    with t2:
+        st.subheader("Inventory Composition by Body Style")
+        fig_sun = px.sunburst(df.sample(2000), path=['drive', 'type'], values='price',
+                              template="plotly_dark", color_discrete_sequence=px.colors.sequential.Viridis)
+        st.plotly_chart(fig_sun, use_container_width=True)
+
+    with t3:
+        st.subheader("Statistical Correlation Matrix")
+        corr = df[['price', 'year', 'lat', 'long']].corr()
+        fig_heat = px.imshow(corr, text_auto=".2f", color_continuous_scale='RdBu_r', template="plotly_dark")
+        st.plotly_chart(fig_heat, use_container_width=True)
 
 elif page == "🗺️ Regional Heatmap":
     st.title("🗺️ Geographic Supply Density")
-    brand_m = st.selectbox("Filter Density by Brand:", sorted(df['manufacturer'].unique()))
+    brand_m = st.selectbox("Filter Map by Brand:", sorted(df['manufacturer'].unique()))
     m_df = df[df['manufacturer'] == brand_m].dropna(subset=['lat', 'long'])
     if not m_df.empty:
         center = [m_df['lat'].mean(), m_df['long'].mean()]
