@@ -17,6 +17,7 @@ st.markdown("""
     div[data-testid="stMetricValue"] { font-size: 26px; color: #00d4ff; }
     section[data-testid="stSidebar"] { background-color: #161b22; }
     
+    /* Responsive Spec Card Styling */
     .spec-card {
         border: 1px solid #333; 
         padding: 20px; 
@@ -24,7 +25,7 @@ st.markdown("""
         background-color: #1e252e;
         margin-bottom: 20px;
         transition: 0.3s;
-        min-height: 280px; /* Adjusted to ensure no spill-over */
+        min-height: 280px; /* Flexible height to prevent spill-over */
         display: flex;
         flex-direction: column;
         justify-content: space-between;
@@ -54,10 +55,12 @@ def load_data(file_id):
                 "fuel", "drive", "transmission", "type"]
         df = pd.read_parquet(OUTPUT_FILE, columns=cols)
         
-        # --- NEW: DROP ROWS WITH 'other' ---
-        # Checks manufacturer, fuel, transmission, and type for the word 'other'
-        for col in ["manufacturer", "fuel", "transmission", "type"]:
-            df = df[~df[col].astype(str).str.lower().str.contains("other", na=False)]
+        # --- DROP ROWS CONTAINING 'other' ---
+        # Checks specified columns for the string 'other' (case-insensitive)
+        clean_cols = ["manufacturer", "fuel", "transmission", "type", "drive"]
+        for col in clean_cols:
+            if col in df.columns:
+                df = df[~df[col].astype(str).str.lower().str.contains("other", na=False)]
 
         # Optimization
         df['price'] = pd.to_numeric(df['price'], downcast='float')
@@ -152,7 +155,7 @@ elif page == "📈 Market Trends":
     with t1:
         st.subheader("Price Depreciation vs. Vehicle Year")
         sample_df = df.sample(min(len(df), 3000))
-        # This chart requires 'statsmodels' in requirements.txt
+        # REQUIRES 'statsmodels' in requirements.txt
         fig_trend = px.scatter(sample_df, x="year", y="price", color="fuel",
                                trendline="lowess", template="plotly_dark", opacity=0.4)
         st.plotly_chart(fig_trend, use_container_width=True)
