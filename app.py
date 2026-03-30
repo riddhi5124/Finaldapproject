@@ -8,7 +8,7 @@ from streamlit_folium import folium_static
 from folium.plugins import HeatMap
 
 # 1. Page Config & Professional Branding
-st.set_page_config(page_title="Vehicle Analytics Pro", layout="wide", page_icon="🏎️")
+st.set_page_config(page_title="Vehicle Analytics Pro", layout="wide")
 
 # Custom CSS for UI Polish and Spec Cards
 st.markdown("""
@@ -34,10 +34,11 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# --- DATA CONFIGURATION ---
 FILE_ID = "17VhcD1SApY6M1escKpKloilcO3XAMeWK"
 OUTPUT_FILE = "vehicles.parquet"
 
-@st.cache_data(show_spinner="📥 Syncing and Cleaning Data...")
+@st.cache_data(show_spinner="Syncing and Cleaning Data...")
 def load_data(file_id):
     url = f'https://drive.google.com/uc?id={file_id}'
     if not os.path.exists(OUTPUT_FILE):
@@ -53,7 +54,7 @@ def load_data(file_id):
             if col in df.columns:
                 df = df[~df[col].astype(str).str.lower().str.contains("other", na=False)]
 
-        
+        # Optimization
         df['price'] = pd.to_numeric(df['price'], downcast='float')
         df['year'] = pd.to_numeric(df['year'], downcast='integer')
         
@@ -63,8 +64,8 @@ def load_data(file_id):
 
 df = load_data(FILE_ID)
 
-#  SIDEBAR
-st.sidebar.markdown("<h1 style='text-align: center; color: #00d4ff;'>🏎️ VehiclePro</h1>", unsafe_allow_html=True)
+# --- SIDEBAR NAVIGATION ---
+st.sidebar.markdown("<h1 style='text-align: center; color: #00d4ff;'>VehiclePro</h1>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
 page = st.sidebar.radio("NAVIGATE EXPLORER", [
@@ -98,14 +99,14 @@ if page == "Dashboard Home":
         st.markdown("### Sample Inventory Stream")
         st.dataframe(df.head(15), use_container_width=True)
 
-elif page == " Manufacturer Inventory":
-    st.title(" Manufacturer Inventory")
+elif page == "Manufacturer Inventory":
+    st.title("Manufacturer Inventory")
     if not df.empty:
         brand = st.selectbox("Select a Manufacturer:", sorted(df['manufacturer'].unique()))
         b_df = df[df['manufacturer'] == brand].copy()
         b_df['model'] = b_df['model'].astype(str)
         
-        search = st.text_input("🔍 Filter Model Name:")
+        search = st.text_input("Filter Model Name:")
         if search:
             b_df = b_df[b_df['model'].str.contains(search, case=False)]
 
@@ -144,26 +145,24 @@ elif page == " Manufacturer Inventory":
                 </div>
                 """, unsafe_allow_html=True)
 
-elif page == " Market Trends":
-    st.title(" Advanced Market Share & Trends")
+elif page == "Market Trends":
+    st.title("Advanced Market Share & Trends")
     
-    t1, t2, t3 = st.tabs([" Price Depreciation", " Market Share (Hierarchical)", " Correlation Matrix"])
+    t1, t2, t3 = st.tabs(["Price Depreciation", "Market Share (Hierarchical)", "Correlation Matrix"])
     
     with t1:
         st.subheader("Depreciation Curve by Fuel Type")
         sample_df = df.sample(min(len(df), 2500))
-        # Requires 'statsmodels' in requirements.txt
         fig_trend = px.scatter(sample_df, x="year", y="price", color="fuel",
                                trendline="lowess", template="plotly_dark", opacity=0.4)
         st.plotly_chart(fig_trend, use_container_width=True)
 
     with t2:
         st.subheader("Body Style & Drive Configuration Market Share")
-        # --- SUNBURST MARKET SHARE ---
         sun_df = df.dropna(subset=['type', 'drive']).sample(min(len(df), 2000))
         fig_sun = px.sunburst(
             sun_df, 
-            path=['type', 'drive'], # Inner ring: Body Type, Outer ring: Drive
+            path=['type', 'drive'], 
             values='price', 
             color='type',
             template="plotly_dark",
@@ -171,7 +170,7 @@ elif page == " Market Trends":
             title="Interactive Hierarchy of Vehicle Types"
         )
         st.plotly_chart(fig_sun, use_container_width=True)
-        st.info(" Click on a center slice to 'drill down' into that category's specific drive configurations.")
+        st.info("Click on a center slice to drill down into that category's specific drive configurations.")
 
     with t3:
         st.subheader("Statistical Correlations")
@@ -179,8 +178,8 @@ elif page == " Market Trends":
         fig_heat = px.imshow(corr, text_auto=".2f", color_continuous_scale='RdBu_r', template="plotly_dark")
         st.plotly_chart(fig_heat, use_container_width=True)
 
-elif page == " Regional Heatmap":
-    st.title(" Geographic Supply Density")
+elif page == "Regional Heatmap":
+    st.title("Geographic Supply Density")
     brand_m = st.selectbox("Filter Map by Brand:", sorted(df['manufacturer'].unique()))
     m_df = df[df['manufacturer'] == brand_m].dropna(subset=['lat', 'long'])
     if not m_df.empty:
