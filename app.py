@@ -7,21 +7,31 @@ from io import BytesIO
 from streamlit_folium import folium_static
 from folium.plugins import HeatMap
 
-# Set Page Config
 st.set_page_config(page_title="Used Vehicle Market Analysis", layout="wide")
 
 # --- DATA CONFIGURATION ---
-# Your provided Google Drive File ID
 FILE_ID = "17VhcD1SApY6M1escKpKloilcO3XAMeWK"
 
-@st.cache_data(show_spinner="Connecting to Data Cloud...")
-def load_data_from_drive(file_id):
-    url = f'https://drive.google.com/uc?export=download&id={file_id}'
+@st.cache_data(show_spinner="Downloading Data from Cloud...")
+def load_data_from_drive(id):
+    # This URL handles the "Large File" confirmation from Google Drive
+    def get_confirm_token(response):
+        for key, value in response.cookies.items():
+            if key.startswith('download_warning'):
+                return value
+        return None
+
+    URL = "https://docs.google.com/uc?export=download"
+    session = requests.Session()
+    response = session.get(URL, params={'id': id}, stream=True)
+    token = get_confirm_token(response)
+
+    if token:
+        params = {'id': id, 'confirm': token}
+        response = session.get(URL, params=params, stream=True)
+    
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        
-        # Load the Parquet data directly from the response
+        # Read the parquet from the session response
         df = pd.read_parquet(BytesIO(response.content))
         
         # Immediate RAM Optimization
@@ -29,60 +39,46 @@ def load_data_from_drive(file_id):
                          "cylinders", "fuel", "drive", "type", "transmission"]
         df = df[required_cols]
 
-        # Memory Optimization: Downcasting
+        # Downcasting and Categories
         df['price'] = pd.to_numeric(df['price'], downcast='float')
         df['year'] = pd.to_numeric(df['year'], downcast='integer')
-
-        # Memory Optimization: Categorical Types
-        cat_cols = ["manufacturer", "fuel", "drive", "type", "transmission"]
-        for col in cat_cols:
-            if col in df.columns:
-                df[col] = df[col].astype('category')
+        for col in ["manufacturer", "fuel", "drive", "type", "transmission"]:
+            df[col] = df[col].astype('category')
 
         return df.dropna(subset=["manufacturer", "model", "year", "price", "lat", "long"])
     except Exception as e:
-        st.error(f"Error fetching data: {e}")
+        st.error(f"Error parsing file: {e}. Ensure the file on Drive is a valid .parquet file.")
         return pd.DataFrame()
 
-# Automatically load data on startup
+# Load data automatically
 df = load_data_from_drive(FILE_ID)
 
-# --- SIDEBAR NAVIGATION (CLEAN VERSION) ---
+# --- SIDEBAR NAVIGATION (NO UPLOADER) ---
 st.sidebar.title("Navigation")
 
-# Only show the radio buttons, NO file uploader logic here
 if not df.empty:
     page = st.sidebar.radio("Go to", [
-        "Home", 
-        "Models by Company",
-        "Most Listed Vehicle Brands", 
-        "Transmission vs Type", 
-        "Manufacturer vs Drive", 
-        "Brand-Specific Heatmap"
+        "Home", "Models by Company", "Most Listed Vehicle Brands", 
+        "Transmission vs Type", "Manufacturer vs Drive", "Brand-Specific Heatmap"
     ])
 else:
     page = "Home"
-    st.sidebar.warning("Waiting for data...")
+    st.sidebar.warning("Data loading failed.")
 
 # --- PAGES ---
 if page == "Home":
     st.title("🚗 Used Vehicle Market Analysis Dashboard")
     st.markdown("---")
-    
     if not df.empty:
         col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Listings", f"{len(df):,}")
-        with col2:
-            st.metric("Unique Brands", df['manufacturer'].nunique())
-        with col3:
-            st.metric("Avg Price", f"${df['price'].mean():,.2f}")
-
-        st.markdown("### Welcome!")
-        st.markdown("Explore regional trends and vehicle specifications across the US.")
+        col1.metric("Total Listings", f"{len(df):,}")
+        col2.metric("Unique Brands", df['manufacturer'].nunique())
+        col3.metric("Avg Price", f"${df['price'].mean():,.2f}")
         st.dataframe(df.head(10), use_container_width=True)
     else:
-        st.error("Data failed to load from Google Drive. Please check your File ID and Drive sharing settings.")
+        st.error("Dataset not found. Check Drive permissions or ID.")
+
+# [Rest of the visualization code from previous turns remains the same]
 
 elif page == "Models by Company":
     st.subheader("Models by Manufacturer")
