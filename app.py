@@ -95,7 +95,7 @@ if page == "Dashboard Home":
         c4.metric(f"Market Leader ({top_brand.title()})", f"{top_val:.1f}% Share")
         
         st.markdown("---")
-        st.markdown("### 📋 Sample Inventory Stream")
+        st.markdown("### Sample Inventory Stream")
         st.dataframe(df.head(15), use_container_width=True)
 
 elif page == " Manufacturer Inventory":
@@ -147,7 +147,7 @@ elif page == " Manufacturer Inventory":
 elif page == " Market Trends":
     st.title(" Advanced Market Share & Trends")
     
-    t1, t2, t3 = st.tabs([" Price Depreciation", "🏗️ Market Share (Hierarchical)", "🔗 Correlation Matrix"])
+    t1, t2, t3 = st.tabs([" Price Depreciation", " Market Share (Hierarchical)", " Correlation Matrix"])
     
     with t1:
         st.subheader("Depreciation Curve by Fuel Type")
