@@ -48,7 +48,7 @@ def load_data(file_id):
                 "fuel", "drive", "transmission", "type"]
         df = pd.read_parquet(OUTPUT_FILE, columns=cols)
         
-        # --- DROP ROWS CONTAINING 'other' ---
+        # --- CLEANING ---
         clean_cols = ["manufacturer", "fuel", "transmission", "type", "drive"]
         for col in clean_cols:
             if col in df.columns:
@@ -84,13 +84,11 @@ st.sidebar.caption("By Riddhiman Mazumder")
 if page == "Dashboard Home":
     st.title("Market Intelligence Dashboard")
     if not df.empty:
-        # Top Metrics
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Active Listings", f"{len(df):,}")
         c2.metric("Market Brands", df['manufacturer'].nunique())
         c3.metric("Avg Price", f"${df['price'].mean():,.0f}")
         
-        # Calculated Metric: % of Market for Top Brand
         top_brand = df['manufacturer'].value_counts().index[0]
         top_val = (df['manufacturer'].value_counts().iloc[0] / len(df)) * 100
         c4.metric(f"Market Leader ({top_brand.title()})", f"{top_val:.1f}% Share")
@@ -151,19 +149,21 @@ elif page == "Market Trends":
     t1, t2, t3, t4 = st.tabs([
         "Price Depreciation", 
         "Market Share (Hierarchical)", 
-        "Market Concentration (1)", 
-        "Feature Interconnectivity (3)"
+        "Price Ranking", 
+        "Market Volume"
     ])
     
     with t1:
         st.subheader("Depreciation Curve by Fuel Type")
+        # Sample for scatter performance
         sample_df = df.sample(min(len(df), 2500))
         fig_trend = px.scatter(sample_df, x="year", y="price", color="fuel",
-                                trendline="lowess", template="plotly_dark", opacity=0.4)
+                               trendline="lowess", template="plotly_dark", opacity=0.4)
         st.plotly_chart(fig_trend, use_container_width=True)
 
     with t2:
         st.subheader("Body Style & Drive Configuration Market Share")
+        # Sunburst is better with a clean sample to avoid clutter
         sun_df = df.dropna(subset=['type', 'drive']).sample(min(len(df), 2000))
         fig_sun = px.sunburst(
             sun_df, 
@@ -175,40 +175,23 @@ elif page == "Market Trends":
             title="Interactive Hierarchy of Vehicle Types"
         )
         st.plotly_chart(fig_sun, use_container_width=True)
-        st.info("Click on a center slice to drill down into that category's specific drive configurations.")
+        st.info("Click on a center slice to drill down into specific drive configurations.")
 
     with t3:
-        # --- NEW VISUALIZATION 1: DENSITY HEATMAP ---
-        st.subheader("Market 'Sweet Spot': Price vs. Age")
-        fig_density = px.density_heatmap(
-            df, 
-            x="year", 
-            y="price", 
-            nbinsx=35, 
-            nbinsy=35, 
-            color_continuous_scale="Viridis",
-            template="plotly_dark",
-            labels={'year': 'Model Year', 'price': 'Price ($)'}
-        )
-        st.plotly_chart(fig_density, use_container_width=True)
-        st.caption("The brightest regions indicate where the highest volume of listings exists.")
+        st.subheader("Top 15 Most Expensive Brands (Average)")
+        avg_price_df = df.groupby('manufacturer')['price'].mean().sort_values(ascending=False).head(15).reset_index()
+        fig_bar = px.bar(avg_price_df, x='price', y='manufacturer', orientation='h',
+                         color='price', color_continuous_scale='Tealgrn', template="plotly_dark")
+        fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_bar, use_container_width=True)
 
     with t4:
-        # --- NEW VISUALIZATION 3: PARALLEL CATEGORIES ---
-        st.subheader("Feature Interconnectivity Flow")
-        # Filtering out NAs for a cleaner flow diagram
-        flow_df = df.dropna(subset=['fuel', 'transmission', 'drive']).sample(min(len(df), 1200))
-        
-        fig_parallel = px.parallel_categories(
-            flow_df, 
-            dimensions=['fuel', 'transmission', 'drive'],
-            color="price",
-            color_continuous_scale=px.colors.sequential.Tealgrn,
-            template="plotly_dark",
-            labels={'fuel': 'Fuel Type', 'transmission': 'Gearbox', 'drive': 'Drivetrain'}
-        )
-        st.plotly_chart(fig_parallel, use_container_width=True)
-        st.info("Trace the lines to see how specific configurations impact the market price.")
+        st.subheader("Market Volume by Vehicle Type")
+        type_counts = df['type'].value_counts().reset_index()
+        type_counts.columns = ['type', 'count']
+        fig_pie = px.pie(type_counts, values='count', names='type', hole=0.4, 
+                         template="plotly_dark", color_discrete_sequence=px.colors.qualitative.Pastel)
+        st.plotly_chart(fig_pie, use_container_width=True)
 
 elif page == "Regional Heatmap":
     st.title("Geographic Supply Density")
@@ -217,5 +200,6 @@ elif page == "Regional Heatmap":
     if not m_df.empty:
         center = [m_df['lat'].mean(), m_df['long'].mean()]
         m = folium.Map(location=center, zoom_start=4, tiles="CartoDB dark_matter")
-        HeatMap(m_df[['lat', 'long']].head(3000).values.tolist(), radius=10, blur=15).add_to(m)
+        # Sampling map points for performance
+        HeatMap(m_df[['lat', 'long']].sample(min(len(m_df), 2000)).values.tolist(), radius=10, blur=15).add_to(m)
         folium_static(m)
